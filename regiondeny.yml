@@ -1,0 +1,217 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: AWS CloudFormation Template to Dynamically Create and Attach SCP to an OU or Account in Dev or Prod Environment
+Parameters:
+  Environment:
+    Type: String
+    Description: Select the environment to deploy to.
+    AllowedValues:
+      - Dev
+      - Prod
+    Default: Dev
+
+  TargetType:
+    Type: String
+    Description: Specify whether to apply the SCP to an OU or Account ID.
+    AllowedValues:
+      - OU
+      - Account
+    Default: OU
+
+  OUName:
+    Type: String
+    Description: Organizational Unit Name (e.g., Development, Infrastructure, Security, etc.)
+    AllowedValues:
+      - Development
+      - Infrastructure
+      - pci
+      - Security
+      - Suspended
+      - transitional
+    Condition: IsOU
+
+  AccountId:
+    Type: String
+    Description: Account ID to which the SCP will be attached. Required if TargetType is Account.
+    ConstraintDescription: Must be a valid 12-digit AWS Account ID.
+    MinLength: 12
+    MaxLength: 12
+    Pattern: "^[0-9]{12}$"
+    Condition: IsAccount
+
+  DeniedRegions:
+    Type: CommaDelimitedList
+    Description: List of AWS regions to allow access. Access to regions not in this list will be denied.
+
+Mappings:
+  DevOUIdMapping:
+    Development:
+      Id: ou-i8ld-54q2yu21
+    Infrastructure:
+      Id: ou-i8ld-yg1jz3hh
+    pci:
+      Id: ou-i8ld-zp2okup0
+    Security:
+      Id: ou-i8ld-kehnjswz
+    Suspended:
+      Id: ou-i8ld-sv3udd41
+    transitional:
+      Id: ou-i8ld-dkoydpc7
+
+  ProdOUIdMapping:
+    exceptions:
+      Id: ou-w6hq-3npw96ae
+    Infrastructure:
+      Id: ou-w6hq-ngnnu8nh
+    pci:
+      Id: ou-w6hq-bw5bhaus
+    PolicyDev:
+      Id: ou-w6hq-fzcdn73z 
+    Security:
+      Id: ou-w6hq-ri0y02qf
+    Suspended:
+      Id: ou-w6hq-ouctq7qr
+    transitional:
+      Id: ou-w6hq-lne6w8dg
+
+Conditions:
+  IsOU: !Equals [ !Ref TargetType, "OU" ]
+  IsAccount: !Equals [ !Ref TargetType, "Account" ]
+  IsDevEnv: !Equals [ !Ref Environment, "Dev" ]
+  IsProdEnv: !Equals [ !Ref Environment, "Prod" ]
+
+Resources:
+  RegionDenyPolicy:
+    DeletionPolicy: Retain
+    Type: AWS::Organizations::Policy
+    Properties:
+      Type: SERVICE_CONTROL_POLICY
+      Name: SCPDenyRegions
+      Content:
+        Fn::Sub: >
+          {
+            "Version": "2012-10-17",
+            "Statement": [
+              {
+                "Sid": "GRREGIONDENY",
+                "Effect": "Deny",
+                "Condition": {
+                  "StringNotEquals": {
+                    "aws:RequestedRegion": ${DeniedRegions}
+                  },
+                  "ArnNotLike": {
+                    "aws:PrincipalARN": [
+                      "arn:aws:iam::*:role/AWSControlTowerExecution",
+                      "arn:aws:iam::*:role/stacksets-exec-*"
+                    ]
+                  }
+                },
+                "Resource": "*",
+                "NotAction": [
+                  "a4b:*",
+                  "access-analyzer:*",
+                  "account:*",
+                  "acm:*",
+                  "activate:*",
+                  "artifact:*",
+                  "aws-marketplace-management:*",
+                  "aws-marketplace:*",
+                  "aws-portal:*",
+                  "billing:*",
+                  "billingconductor:*",
+                  "budgets:*",
+                  "ce:*",
+                  "chatbot:*",
+                  "chime:*",
+                  "cloudfront:*",
+                  "cloudtrail:LookupEvents",
+                  "compute-optimizer:*",
+                  "config:*",
+                  "consoleapp:*",
+                  "consolidatedbilling:*",
+                  "cur:*",
+                  "datapipeline:GetAccountLimits",
+                  "devicefarm:*",
+                  "directconnect:*",
+                  "ec2:DescribeRegions",
+                  "ec2:DescribeTransitGateways",
+                  "ec2:DescribeVpnGateways",
+                  "ecr-public:*",
+                  "fms:*",
+                  "freetier:*",
+                  "globalaccelerator:*",
+                  "health:*",
+                  "iam:*",
+                  "importexport:*",
+                  "invoicing:*",
+                  "iq:*",
+                  "kms:*",
+                  "license-manager:ListReceivedLicenses",
+                  "lightsail:Get*",
+                  "mobileanalytics:*",
+                  "networkmanager:*",
+                  "notifications-contacts:*",
+                  "notifications:*",
+                  "organizations:*",
+                  "payments:*",
+                  "pricing:*",
+                  "quicksight:DescribeAccountSubscription",
+                  "resource-explorer-2:*",
+                  "route53-recovery-cluster:*",
+                  "route53-recovery-control-config:*",
+                  "route53-recovery-readiness:*",
+                  "route53:*",
+                  "route53domains:*",
+                  "s3:CreateMultiRegionAccessPoint",
+                  "s3:DeleteMultiRegionAccessPoint",
+                  "s3:DescribeMultiRegionAccessPointOperation",
+                  "s3:GetAccountPublicAccessBlock",
+                  "s3:GetBucketLocation",
+                  "s3:GetBucketPolicyStatus",
+                  "s3:GetBucketPublicAccessBlock",
+                  "s3:GetMultiRegionAccessPoint",
+                  "s3:GetMultiRegionAccessPointPolicy",
+                  "s3:GetMultiRegionAccessPointPolicyStatus",
+                  "s3:GetStorageLensConfiguration",
+                  "s3:GetStorageLensDashboard",
+                  "s3:ListAllMyBuckets",
+                  "s3:ListMultiRegionAccessPoints",
+                  "s3:ListStorageLensConfigurations",
+                  "s3:PutAccountPublicAccessBlock",
+                  "s3:PutMultiRegionAccessPointPolicy",
+                  "savingsplans:*",
+                  "shield:*",
+                  "sso:*",
+                  "sts:*",
+                  "support:*",
+                  "supportapp:*",
+                  "supportplans:*",
+                  "sustainability:*",
+                  "tag:GetResources",
+                  "tax:*",
+                  "trustedadvisor:*",
+                  "vendor-insights:ListEntitledSecurityProfiles",
+                  "waf-regional:*",
+                  "waf:*",
+                  "wafv2:*"
+                ]
+              }
+            ]
+          }
+
+      TargetIds:
+        Fn::If:
+          - IsDevEnv
+          - Fn::If:
+              - IsOU
+              - Fn::FindInMap:
+                  - DevOUIdMapping
+                  - Ref: OUName
+                  - Id
+              - Ref: AccountId
+          - Fn::If:
+              - IsProdEnv
+              - Fn::FindInMap:
+                  - ProdOUIdMapping
+                  - Ref: OUName
+                  - Id
+              - Ref: AccountId
